@@ -1,0 +1,48 @@
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from sklearn.model_selection import train_test_split
+
+data = pd.read_csv("/content/drive/MyDrive/newtest.csv")
+
+print("Dataset columns: ", data.columns)
+
+data_clean = data[['text', 'sentiment']].dropna()
+
+print("Unique sentiment labels: ", data_clean['sentiment'].unique())
+
+sentiment_mapping = {'negative': 0, 'positive': 1, 'neutral': 2}
+data_clean['sentiment'] = data_clean['sentiment'].map(sentiment_mapping)
+
+if data_clean['sentiment'].isnull().sum() > 0:
+    print("Unmapped sentiment values found! Check your sentiment_mapping.")
+    print(data_clean[data_clean['sentiment'].isnull()])
+
+texts = data_clean['text'].values
+labels = data_clean['sentiment'].values
+
+max_words = 5000
+max_len = 100
+tokenizer = Tokenizer(num_words=max_words, oov_token='<OOV>')
+tokenizer.fit_on_texts(texts)
+sequences = tokenizer.texts_to_sequences(texts)
+padded_sequences = pad_sequences(sequences, maxlen=max_len, padding='post')
+
+X_train, X_val, y_train, y_val = train_test_split(padded_sequences, labels, test_size=0.2, random_state=42)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Embedding(input_dim=max_words, output_dim=128, input_length=max_len),
+    tf.keras.layers.LSTM(64, return_sequences=True),
+    tf.keras.layers.LSTM(32),
+    tf.keras.layers.Dense(32, activation='relu'),
+    tf.keras.layers.Dense(3, activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+history = model.fit(X_train, y_train, epochs=5, batch_size=64, validation_data=(X_val, y_val))
+
+loss, accuracy = model.evaluate(X_val, y_val)
+print(f"Validation Accuracy: {accuracy*100:.2f}%")
